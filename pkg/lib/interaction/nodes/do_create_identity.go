@@ -2,6 +2,8 @@ package nodes
 
 import (
 	"errors"
+	"fmt"
+	"time"
 
 	"github.com/authgear/authgear-server/pkg/api"
 	"github.com/authgear/authgear-server/pkg/api/event"
@@ -70,10 +72,14 @@ func (n *NodeDoCreateIdentity) Prepare(ctx *interaction.Context, graph *interact
 func (n *NodeDoCreateIdentity) GetEffects() ([]interaction.Effect, error) {
 	return []interaction.Effect{
 		interaction.EffectRun(func(ctx *interaction.Context, graph *interaction.Graph, nodeIndex int) error {
+			startAt := time.Now()
+			fmt.Println("-- -- -- -- NodeDoCreateIdentity: Effect1", startAt)
 			user, err := ctx.Users.Get(n.Identity.UserID, accesscontrol.RoleGreatest)
 			if err != nil {
 				return err
 			}
+			t1 := time.Now()
+			fmt.Println("-- -- -- -- NodeDoCreateIdentity: Users.Get", t1.Sub(startAt).Abs().Milliseconds())
 
 			if n.Identity.Type == model.IdentityTypeBiometric && user.IsAnonymous {
 				return api.NewInvariantViolated(
@@ -91,9 +97,13 @@ func (n *NodeDoCreateIdentity) GetEffects() ([]interaction.Effect, error) {
 				}
 				return err
 			}
+			t2 := time.Now()
+			fmt.Println("-- -- -- -- NodeDoCreateIdentity: CheckDuplicated", t2.Sub(t1).Abs().Milliseconds())
 			if err := ctx.Identities.Create(n.Identity); err != nil {
 				return err
 			}
+			t3 := time.Now()
+			fmt.Println("-- -- -- -- NodeDoCreateIdentity: Identities.Create", t3.Sub(t2).Abs().Milliseconds())
 
 			if !n.IsAddition && ctx.Config.UserProfile.StandardAttributes.Population.Strategy == config.StandardAttributesPopulationStrategyOnSignup {
 				err := ctx.StdAttrsService.PopulateStandardAttributes(n.Identity.UserID, n.Identity)

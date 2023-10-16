@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"reflect"
+	"time"
 
 	"github.com/authgear/authgear-server/pkg/api/apierrors"
 	"github.com/authgear/authgear-server/pkg/api/model"
@@ -197,7 +199,9 @@ func (s *Service2) doPost(
 	var err error
 	for {
 		var edges []interaction.Edge
+		fmt.Println("-- Start Running at", time.Now())
 		graph, edges, err = s.runGraph(session, result, inputFn, graphFn)
+		fmt.Println("-- End Running at", time.Now())
 		isFinished = len(edges) == 0 && err == nil
 		if err != nil || isFinished {
 			break
@@ -387,6 +391,7 @@ func (s *Service2) runGraph(
 	}, func(ctx *interaction.Context) (*interaction.Graph, error) {
 		var err error
 		graph, err = graphFn(ctx)
+		fmt.Println("-- -- Start from node", reflect.TypeOf(graph.CurrentNode()).String(), time.Now())
 		if err != nil {
 			return nil, err
 		}
@@ -403,6 +408,7 @@ func (s *Service2) runGraph(
 
 		var newGraph *interaction.Graph
 		newGraph, edges, err = s.Graph.Accept(ctx, graph, input)
+		fmt.Println("-- -- End at node", reflect.TypeOf(newGraph.CurrentNode()).String(), time.Now())
 
 		var clearCookie *interaction.ErrClearCookie
 		var inputRequired *interaction.ErrInputRequired

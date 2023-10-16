@@ -3,8 +3,10 @@ package interaction
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 	"sort"
+	"time"
 
 	"github.com/authgear/authgear-server/pkg/api/apierrors"
 	"github.com/authgear/authgear-server/pkg/api/model"
@@ -333,17 +335,23 @@ func (g *Graph) FillDetails(err error) error {
 // Apply applies the effect the the graph nodes into the context.
 func (g *Graph) Apply(ctx *Context) error {
 	for i, node := range g.Nodes {
+		startAt := time.Now()
+		fmt.Println("-- -- -- Apply Node", reflect.TypeOf(node).String(), startAt)
 		// Prepare the node with sliced graph.
 		slicedGraph := *g
 		slicedGraph.Nodes = slicedGraph.Nodes[:i+1]
 		if err := node.Prepare(ctx, &slicedGraph); err != nil {
 			return g.FillDetails(err)
 		}
+		t1 := time.Now()
+		fmt.Println("-- -- -- Apply Node: Prepared. Duration:", t1.Sub(startAt).Abs().Milliseconds())
 
 		effs, err := node.GetEffects()
 		if err != nil {
 			return g.FillDetails(err)
 		}
+		t2 := time.Now()
+		fmt.Println("-- -- -- Apply Node: Filled Detail. Duration:", t2.Sub(t1).Abs().Milliseconds())
 		for _, eff := range effs {
 			// Apply the effect with unsliced graph.
 			err = eff.apply(ctx, g, i)
@@ -351,6 +359,8 @@ func (g *Graph) Apply(ctx *Context) error {
 				return err
 			}
 		}
+		t3 := time.Now()
+		fmt.Println("-- -- -- Apply Node: Applied Effects. Duration:", t3.Sub(t2).Abs().Milliseconds())
 	}
 	return nil
 }
@@ -360,6 +370,8 @@ func (g *Graph) accept(ctx *Context, input interface{}) (*Graph, []Edge, error) 
 	graph := g
 	for {
 		node := graph.CurrentNode()
+		start := time.Now()
+		fmt.Println("-- -- -- Current Node", reflect.TypeOf(node).String(), start)
 		edges, err := node.DeriveEdges(graph)
 		if err != nil {
 			return nil, nil, graph.FillDetails(err)
@@ -387,11 +399,14 @@ func (g *Graph) accept(ctx *Context, input interface{}) (*Graph, []Edge, error) 
 			}
 			break
 		}
+		end := time.Now()
+		fmt.Println("-- -- -- Current Node End. Duration:", end.Sub(start).Abs().Milliseconds(), end)
 
 		// No edges are followed, input is required
 		if nextNode == nil {
 			return graph, edges, &ErrInputRequired{}
 		}
+		fmt.Println("-- -- -- Next Node", reflect.TypeOf(nextNode).String(), time.Now())
 
 		// Follow the edge to nextNode
 		graph = graph.appendingNode(nextNode)

@@ -3,6 +3,7 @@ package nodes
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/authgear/authgear-server/pkg/api"
 	"github.com/authgear/authgear-server/pkg/api/event/nonblocking"
@@ -39,7 +40,11 @@ func (e *EdgeSelectIdentityEnd) Instantiate(ctx *interaction.Context, graph *int
 	defer ctx.RateLimiter.Cancel(reservation)
 
 	var otherMatch *identity.Info
+	startAt := time.Now()
+	fmt.Println("-- -- -- -- SearchBySpec start", startAt)
 	exactMatch, otherMatches, err := ctx.Identities.SearchBySpec(e.IdentitySpec)
+	endAt := time.Now()
+	fmt.Println("-- -- -- -- SearchBySpec end. Duration:", endAt.Sub(startAt).Abs().Milliseconds(), endAt)
 	if err != nil {
 		return nil, err
 	}

@@ -2,6 +2,8 @@ package facade
 
 import (
 	"errors"
+	"fmt"
+	"time"
 
 	"github.com/authgear/authgear-server/pkg/api"
 	"github.com/authgear/authgear-server/pkg/api/apierrors"
@@ -166,20 +168,28 @@ func (c *Coordinator) IdentityUpdateWithSpec(is *identity.Info, spec *identity.S
 }
 
 func (c *Coordinator) IdentityCreate(is *identity.Info) error {
+	t0 := time.Now()
+	fmt.Println("-- -- -- -- Coordinator.IdentityCreate:", t0)
 	err := c.Identities.Create(is)
 	if err != nil {
 		return err
 	}
+	t1 := time.Now()
+	fmt.Println("-- -- -- -- Coordinator.IdentityCreate Identities.Create:", t1.Sub(t0).Abs().Milliseconds())
 
 	err = c.markOAuthEmailAsVerified(is)
 	if err != nil {
 		return err
 	}
+	t2 := time.Now()
+	fmt.Println("-- -- -- -- Coordinator.IdentityCreate markOAuthEmailAsVerified:", t2.Sub(t1).Abs().Milliseconds())
 
 	err = c.StdAttrsService.PopulateIdentityAwareStandardAttributes(is.UserID)
 	if err != nil {
 		return err
 	}
+	t3 := time.Now()
+	fmt.Println("-- -- -- -- Coordinator.IdentityCreate PopulateIdentityAwareStandardAttributes:", t3.Sub(t2).Abs().Milliseconds())
 
 	return nil
 }
