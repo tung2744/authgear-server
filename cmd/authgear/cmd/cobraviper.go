@@ -50,3 +50,10 @@ var ArgInputFolder = &cobraviper.StringArgument{
 	Short:        "i",
 	Usage:        "Path to input folder",
 }
+
+var ArgInputFile = &cobraviper.StringArgument{
+	ArgumentName: "input-file",
+	EnvName:      "INPUT_FILE",
+	Short:        "i",
+	Usage:        "Path to input file",
+}
