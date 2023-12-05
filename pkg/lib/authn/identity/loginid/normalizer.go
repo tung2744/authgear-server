@@ -45,7 +45,7 @@ func (n *EmailNormalizer) Normalize(loginID string) (string, error) {
 	// https://golang.org/src/net/mail/message.go?s=5217:5250#L172
 	at := strings.LastIndex(loginID, "@")
 	if at < 0 {
-		panic("loginid: malformed address, should be rejected by the email format checker")
+		return "", fmt.Errorf("loginid: malformed address, should be rejected by the email format checker")
 	}
 	local, domain := loginID[:at], loginID[at+1:]
 
@@ -77,7 +77,7 @@ func (n *EmailNormalizer) Normalize(loginID string) (string, error) {
 func (n *EmailNormalizer) ComputeUniqueKey(normalizeLoginID string) (string, error) {
 	at := strings.LastIndex(normalizeLoginID, "@")
 	if at < 0 {
-		panic("loginid: malformed address, should be rejected by the email format checker")
+		return "", fmt.Errorf("loginid: malformed address, should be rejected by the email format checker")
 	}
 	local, domain := normalizeLoginID[:at], normalizeLoginID[at+1:]
 	punycode, err := idna.ToASCII(domain)
