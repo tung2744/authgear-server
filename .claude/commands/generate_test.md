@@ -1,3 +1,0 @@
-- Generate test case for $ARGUMENTS
-- Refer to existing tests in the same package for the style.
-- Run `go test` on the package to verify the generated tests are all passed.
