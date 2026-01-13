@@ -1,0 +1,246 @@
+---
+# 1. PERMISSIONS (Alloy needs to read pods)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: alloy-logs-sa
+  namespace: authgear
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: alloy-logs-role
+  namespace: authgear
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "events"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: alloy-logs-binding
+  namespace: authgear
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: alloy-logs-role
+subjects:
+  - kind: ServiceAccount
+    name: alloy-logs-sa
+    namespace: authgear
+
+---
+# 2. STORAGE (Loki stores the data here)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: loki-storage
+  namespace: authgear
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 20Gi
+
+---
+# 3. LOKI CONFIGURATION (90-Day Retention)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loki-config
+  namespace: authgear
+data:
+  local-config.yaml: |
+    auth_enabled: false
+    server:
+      http_listen_port: 3100
+    
+    common:
+      path_prefix: /loki
+      storage:
+        filesystem:
+          chunks_directory: /loki/chunks
+          rules_directory: /loki/rules
+      replication_factor: 1
+      ring:
+        instance_addr: 127.0.0.1
+        kvstore:
+          store: inmemory
+
+    schema_config:
+      configs:
+        - from: 2024-01-01
+          store: tsdb
+          object_store: filesystem
+          schema: v13
+          index:
+            prefix: index_
+            period: 24h
+
+    # 90-DAY RETENTION POLICY
+    compactor:
+      working_directory: /loki/retention
+      compaction_interval: 10m
+      retention_enabled: true
+      retention_delete_delay: 2h
+      retention_delete_worker_count: 150
+      delete_request_store: filesystem
+    
+    limits_config:
+      retention_period: 2160h  # 90 Days (24 * 90)
+      reject_old_samples: true
+      reject_old_samples_max_age: 2160h
+
+---
+# 4. LOKI SERVICE & DEPLOYMENT
+apiVersion: v1
+kind: Service
+metadata:
+  name: loki-store
+  namespace: authgear
+spec:
+  selector:
+    app: loki
+  ports:
+    - name: http-metrics
+      port: 3100
+      targetPort: 3100
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loki
+  namespace: authgear
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: loki
+  template:
+    metadata:
+      labels:
+        app: loki
+    spec:
+      securityContext:
+        fsGroup: 10001
+        runAsGroup: 10001
+        runAsUser: 10001
+      containers:
+        - name: loki
+          image: grafana/loki:3.0.0
+          args: ["-config.file=/etc/loki/local-config.yaml"]
+          ports:
+            - containerPort: 3100
+          volumeMounts:
+            - name: config
+              mountPath: /etc/loki
+            - name: storage
+              mountPath: /loki
+      volumes:
+        - name: config
+          configMap:
+            name: loki-config
+        - name: storage
+          persistentVolumeClaim:
+            claimName: loki-storage
+
+---
+# 5. ALLOY CONFIGURATION (Streaming to Loki)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alloy-config
+  namespace: authgear
+data:
+  config.alloy: |
+    discovery.kubernetes "pods" {
+      role = "pod"
+      namespaces {
+        names = ["authgear"]
+      }
+    }
+    discovery.relabel "filtered_pods" {
+      targets = discovery.kubernetes.pods.targets
+
+      rule {
+        source_labels = ["__meta_kubernetes_pod_label_app"]
+        regex         = "loki|alloy"
+        action        = "drop"
+      }
+
+      rule {
+        source_labels = ["__meta_kubernetes_namespace"]
+        target_label  = "namespace"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_name"]
+        target_label  = "pod"
+      }
+
+      rule {
+        source_labels = ["__meta_kubernetes_pod_controller_name"]
+        target_label  = "name"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_controller_kind"]
+        target_label  = "kind"
+      }
+
+      rule {
+        source_labels = ["__meta_kubernetes_pod_label_app"]
+        target_label  = "deployment"
+      }
+    }
+
+    loki.source.kubernetes "container_logs" {
+      targets    = discovery.relabel.filtered_pods.output
+      forward_to = [loki.write.local.receiver]
+    }
+    loki.source.kubernetes_events "events" {
+      namespaces = ["authgear"]
+      forward_to = [loki.write.local.receiver]
+    }
+    loki.write "local" {
+      endpoint {
+        url = "http://loki-store.authgear.svc.cluster.local:3100/loki/api/v1/push"
+      }
+    }
+
+---
+# 6. ALLOY DEPLOYMENT
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alloy
+  namespace: authgear
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alloy
+  template:
+    metadata:
+      labels:
+        app: alloy
+    spec:
+      serviceAccountName: alloy-logs-sa
+      containers:
+        - name: alloy
+          image: grafana/alloy:v1.12.2
+          args: [
+            "run",
+            "--server.http.listen-addr=0.0.0.0:12345",
+            "--storage.path=/var/lib/alloy/data",
+            "/etc/alloy/config.alloy"
+          ]
+          env:
+            - name: GOMEMLIMIT
+              value: "400MiB"
+          volumeMounts:
+            - name: config
+              mountPath: /etc/alloy
+      volumes:
+        - name: config
+          configMap:
+            name: alloy-config

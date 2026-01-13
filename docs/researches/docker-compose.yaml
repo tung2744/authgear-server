@@ -1,0 +1,30 @@
+version: "3.8"
+
+services:
+  loki:
+    image: grafana/loki:3.0.0
+    ports:
+      - "3100:3100"
+      - "9096:9096"
+    volumes:
+      - ./loki-config.yaml:/etc/loki/config.yaml
+      - ./loki:/loki
+    command: -config.file=/etc/loki/config.yaml
+
+  alloy:
+    image: grafana/alloy:latest
+    volumes:
+      - ./alloy-config.river:/etc/alloy/config.river
+      - ./logs:/var/log
+    command: run /etc/alloy/config.river
+
+  grafana:
+    image: grafana/grafana:10.2.0
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana-datasource.yaml:/etc/grafana/provisioning/datasources/loki.yaml
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true

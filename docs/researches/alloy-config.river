@@ -1,0 +1,51 @@
+// Discover all .jsonl files in /var/log
+local.file_match "all_logs" {
+    path_targets = [{
+        __path__ = "/var/log/*.jsonl",
+    }]
+}
+
+// Read the discovered files
+loki.source.file "read_all_logs" {
+  targets    = local.file_match.all_logs.targets
+  forward_to = [loki.relabel.set_job.receiver]
+}
+
+// Set the 'job' label based on the filename
+loki.relabel "set_job" {
+  forward_to = [loki.process.parse_json.receiver]
+
+  // if filename starts with 'events', set job="events"
+  rule {
+    source_labels = ["__path__"]
+    regex         = ".*/(events)_.*\\.jsonl"
+    target_label  = "job"
+    replacement   = "$1" // Use the first capture group
+  }
+
+  // if filename starts with 'logs', set job="logs"
+  rule {
+    source_labels = ["__path__"]
+    regex         = ".*/(logs)_.*\\.jsonl"
+    target_label  = "job"
+    replacement   = "$1"
+  }
+}
+
+// Parse the JSON content of the log line
+loki.process "parse_json" {
+    forward_to = [loki.write.local.receiver]
+    stage.json {
+        expressions = { message = "message" }
+    }
+    stage.output {
+        source = "message"
+    }
+}
+
+// Send the processed logs to the local Loki instance
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
