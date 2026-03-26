@@ -52,6 +52,7 @@ export default [
       "no-void": "off",
       "@typescript-eslint/class-methods-use-this": "off",
       "@typescript-eslint/explicit-module-boundary-types": "off",
+      "@typescript-eslint/no-unnecessary-type-arguments": "off",
       "@typescript-eslint/strict-boolean-expressions": "off",
       "tsdoc/syntax": "off",
     },
